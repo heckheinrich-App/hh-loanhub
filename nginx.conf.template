@@ -4,24 +4,32 @@ server {
 
     # Compression
     gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;
 
-    # Static Frontend Assets
-    location / {
-        root /usr/share/nginx/html;
-        index index.html;
-        try_files $uri $uri/ /index.html;
+    # Disable proxy buffering for real-time upstream delivery
+    proxy_buffering off;
+
+    # Lightweight Gateway health check endpoint (served directly by Nginx on Render)
+    location /gateway/health {
+        access_log off;
+        default_type application/json;
+        return 200 '{"status":"online","service":"hh-loanhub-gateway","runtime":"Render Cloud Gateway","upstream":"${CLOUDFLARE_TUNNEL_URL}"}';
     }
 
-    # Proxy all /api/* requests through Cloudflare Tunnel to Local Windows PC
-    location /api/ {
-        proxy_pass ${CLOUDFLARE_TUNNEL_URL}/api/;
+    # Proxy ALL requests (/ and /api/*) directly through Cloudflare Tunnel to Local Windows PC
+    location / {
+        proxy_pass ${CLOUDFLARE_TUNNEL_URL};
 
         # Proxy headers
         proxy_set_header Host $proxy_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Enforce strict no-cache headers so browser & CDN never serve stale UI/scripts
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
 
         # SNI handshake critical for Cloudflare HTTPS tunnels
         proxy_ssl_server_name on;
@@ -36,12 +44,5 @@ server {
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
-    }
-
-    # Lightweight Gateway health check endpoint (served directly by Nginx on Render)
-    location /gateway/health {
-        access_log off;
-        default_type application/json;
-        return 200 '{"status":"online","service":"hh-loanhub-gateway","runtime":"Render Cloud Gateway","upstream":"${CLOUDFLARE_TUNNEL_URL}"}';
     }
 }

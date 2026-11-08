@@ -1,6 +1,6 @@
-/* HH Cash Solutions - Service Worker (PWA Shell Cache & Offline Fallback) */
+/* HH Cash Solutions - Service Worker (Network-First Strategy & Cache-Busting) */
 
-const CACHE_NAME = 'hh-cash-solutions-v1';
+const CACHE_NAME = 'hh-cash-solutions-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -10,55 +10,60 @@ const STATIC_ASSETS = [
   '/icons/icon-512.png'
 ];
 
+// Install: Skip waiting immediately
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
+// Activate: Purge ALL previous caches and claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            console.log('[SW] Purging stale cache:', key);
+            return caches.delete(key);
+          }
+        })
       );
     }).then(() => self.clients.claim())
   );
 });
 
+// Fetch: STRICT NETWORK-FIRST (Always load fresh live files from server)
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  if (event.request.method !== 'GET') return;
 
-  // Always network-first for /api/ requests so balance and loan status are never stale
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        return new Response(JSON.stringify({ error: "Offline - check your internet connection" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" }
-        });
-      })
-    );
-    return;
-  }
-
-  // Cache-first, network-fallback for static frontend shell
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
+    fetch(event.request)
+      .then((networkResponse) => {
+        // Cache in background for offline resilience
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone();
+          const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
+            cache.put(event.request, responseClone);
           });
         }
         return networkResponse;
-      });
-    })
+      })
+      .catch(() => {
+        // Offline fallback only when network is completely unreachable
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          if (event.request.url.includes('/api/')) {
+            return new Response(JSON.stringify({ error: "Offline - check your internet connection" }), {
+              status: 503,
+              headers: { "Content-Type": "application/json" }
+            });
+          }
+          return caches.match('/');
+        });
+      })
   );
 });
