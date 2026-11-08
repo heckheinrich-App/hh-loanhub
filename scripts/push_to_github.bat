@@ -10,7 +10,17 @@ echo ===========================================================================
 echo Project Root: %CD%
 echo.
 
-:: Verify git is installed and repository exists
+:: Verify git is installed (check PATH and WinGet install locations)
+where git >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\Git.MinGit*") do (
+        if exist "%%D\cmd\git.exe" set "PATH=%%D\cmd;!PATH!"
+    )
+    for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\Git.Git*") do (
+        if exist "%%D\cmd\git.exe" set "PATH=%%D\cmd;!PATH!"
+    )
+)
+
 where git >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Git is not installed or not found in system PATH.

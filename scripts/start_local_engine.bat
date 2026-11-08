@@ -20,7 +20,14 @@ if exist "venv\Scripts\activate.bat" (
     echo [INFO] No virtual environment detected in venv/ or .venv/. Using system Python.
 )
 
-:: Verify python is available
+:: Verify python is available (check PATH and standard user installation)
+where python >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
+        set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts;!PATH!"
+    )
+)
+
 where python >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Python is not found in PATH or the activated virtual environment.

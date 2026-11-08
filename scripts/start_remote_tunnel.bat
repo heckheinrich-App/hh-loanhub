@@ -10,7 +10,14 @@ echo ===========================================================================
 echo Local Upstream Target: http://localhost:8000
 echo.
 
-:: Check if cloudflared is installed
+:: Check if cloudflared is installed (check PATH and WinGet install locations)
+where cloudflared >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\Cloudflare.cloudflared*") do (
+        if exist "%%D\cloudflared.exe" set "PATH=%%D;!PATH!"
+    )
+)
+
 where cloudflared >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] cloudflared.exe was not found in your system PATH.
