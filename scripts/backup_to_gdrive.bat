@@ -10,8 +10,12 @@ echo ===========================================================================
 echo Project Root: %CD%
 
 set DATA_DIR=%CD%\data
-set DEFAULT_GDRIVE=C:\Users\Public\GoogleDrive\HH_LOANHUB_Backups
 set TARGET_GDRIVE=
+
+:: Check user profile Google Drive first
+if exist "C:\Users\%USERNAME%\Google Drive" (
+    set TARGET_GDRIVE=C:\Users\%USERNAME%\Google Drive\HH_LOANHUB_Backups
+)
 
 :: Attempt to parse GDRIVE_BACKUP_PATH from .env if present
 if exist ".env" (
@@ -19,13 +23,13 @@ if exist ".env" (
         set KEY=%%A
         set VAL=%%B
         if /i "!KEY!"=="GDRIVE_BACKUP_PATH" (
-            set TARGET_GDRIVE=!VAL!
+            if not "!VAL!"=="" set TARGET_GDRIVE=!VAL!
         )
     )
 )
 
 if "!TARGET_GDRIVE!"=="" (
-    set TARGET_GDRIVE=%DEFAULT_GDRIVE%
+    set TARGET_GDRIVE=C:\Users\Public\GoogleDrive\HH_LOANHUB_Backups
 )
 
 :: Trim possible trailing quotes or spaces
