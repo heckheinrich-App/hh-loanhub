@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B7A28"/>
+      <stop offset="100%" stop-color="#19A93E"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCD34D"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded App Tile -->
+  <rect width="512" height="512" rx="110" fill="url(#bgGrad)"/>
+  
+  <!-- Outer Arch Swoosh -->
+  <path d="M 120 180 C 220 80, 360 80, 420 140 C 370 120, 260 120, 160 190 Z" fill="#FFFFFF" opacity="0.35"/>
+  <path d="M 140 160 C 230 70, 350 70, 440 130 C 390 100, 280 100, 170 170 Z" fill="#FFFFFF" opacity="0.55"/>
+
+  <!-- HH Monogram -->
+  <g filter="url(#shadow)">
+    <!-- First H -->
+    <rect x="130" y="160" width="45" height="180" rx="12" fill="#FFFFFF"/>
+    <rect x="205" y="160" width="45" height="180" rx="12" fill="#FFFFFF"/>
+    <rect x="130" y="225" width="120" height="45" rx="8" fill="#FFFFFF"/>
+
+    <!-- Second H -->
+    <rect x="270" y="160" width="45" height="180" rx="12" fill="#FFFFFF"/>
+    <rect x="345" y="160" width="45" height="180" rx="12" fill="#FFFFFF"/>
+    <rect x="270" y="225" width="120" height="45" rx="8" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Gold Rand Badge Badge in lower right -->
+  <circle cx="395" cy="385" r="55" fill="url(#goldGrad)" stroke="#FFFFFF" stroke-width="6" filter="url(#shadow)"/>
+  <text x="395" y="405" font-family="-apple-system, BlinkMacSystemFont, Arial, sans-serif" font-weight="900" font-size="56" fill="#111827" text-anchor="middle">R</text>
+
+  <!-- Bottom Brand Script -->
+  <text x="256" y="440" font-family="-apple-system, BlinkMacSystemFont, Arial, sans-serif" font-weight="800" font-size="34" fill="#FFFFFF" letter-spacing="1" text-anchor="middle">CASH SOLUTIONS</text>
+</svg>

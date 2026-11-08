@@ -36,6 +36,10 @@ ENV/
 # Local databases & secure core storage (Strictly local, never push to cloud/GitHub)
 data/*
 !data/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+loanhub_*
 
 # Logs and debug traces
 *.log
