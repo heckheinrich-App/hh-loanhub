@@ -12,6 +12,4 @@ services:
     healthCheckPath: /gateway/health
     envVars:
       - key: CLOUDFLARE_TUNNEL_URL
-        sync: false
-        # Configure this in the Render Dashboard with your Cloudflare Tunnel URL:
-        # e.g., https://your-tunnel-name.trycloudflare.com
+        value: https://ruth-mason-threshold-office.trycloudflare.com

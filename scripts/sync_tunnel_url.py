@@ -6,10 +6,11 @@ This script:
 1. Locates and spawns `cloudflared tunnel --url http://localhost:8000`.
 2. Monitors process output to capture the public `https://*.trycloudflare.com` URL.
 3. Automatically writes the captured URL into `ui/tunnel_config.json`.
-4. Updates `CLOUDFLARE_TUNNEL_URL` in `.env`.
-5. Logs tunnel events to `data/tunnel.log` and writes `data/latest_tunnel_url.txt`.
-6. Automatically commits and pushes `ui/tunnel_config.json` to GitHub (if a Git remote exists).
-7. Keeps running in the background to maintain the tunnel alive.
+4. Automatically updates `render.yaml` with `value: <tunnel_url>`.
+5. Updates `CLOUDFLARE_TUNNEL_URL` in `.env`.
+6. Logs tunnel events to `data/tunnel.log` and writes `data/latest_tunnel_url.txt`.
+7. Automatically commits and pushes `render.yaml` and `ui/tunnel_config.json` to GitHub.
+8. Keeps running in the background to maintain the tunnel alive.
 """
 
 import os
@@ -27,6 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 UI_DIR = BASE_DIR / "ui"
 DATA_DIR = BASE_DIR / "data"
 CONFIG_FILE = UI_DIR / "tunnel_config.json"
+RENDER_FILE = BASE_DIR / "render.yaml"
 ENV_FILE = BASE_DIR / ".env"
 LOG_FILE = DATA_DIR / "tunnel.log"
 URL_FILE = DATA_DIR / "latest_tunnel_url.txt"
@@ -103,6 +105,29 @@ def update_env_file(tunnel_url: str):
         f.writelines(new_lines)
 
 
+def update_render_yaml(tunnel_url: str):
+    """Updates the hardcoded CLOUDFLARE_TUNNEL_URL in render.yaml."""
+    if not RENDER_FILE.exists():
+        return
+
+    with open(RENDER_FILE, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Match key: CLOUDFLARE_TUNNEL_URL followed by either sync: false or value: ...
+    pattern = r"(- key: CLOUDFLARE_TUNNEL_URL\s*\n\s*)(?:sync:\s*false|value:\s*[^\n]+)"
+    replacement = rf"\g<1>value: {tunnel_url}"
+
+    new_content, count = re.subn(pattern, replacement, content)
+    if count == 0:
+        # Fallback regex
+        new_content = re.sub(r"(value:\s*)https://[a-zA-Z0-9-]+\.trycloudflare\.com", rf"\g<1>{tunnel_url}", content)
+
+    with open(RENDER_FILE, "w", encoding="utf-8") as f:
+        f.write(new_content)
+
+    print(f"[SYNC] Updated render.yaml with active tunnel: {tunnel_url}")
+
+
 def write_tunnel_config(tunnel_url: str):
     """Writes the active tunnel URL and metadata into ui/tunnel_config.json."""
     data = {
@@ -120,12 +145,13 @@ def write_tunnel_config(tunnel_url: str):
         f.write(tunnel_url)
 
     update_env_file(tunnel_url)
+    update_render_yaml(tunnel_url)
     print(f"[SYNC] Successfully updated config: {CONFIG_FILE}")
     print(f"[SYNC] Active Tunnel: {tunnel_url}")
 
 
 def git_push_config():
-    """Automatically commits and pushes ui/tunnel_config.json if a remote exists."""
+    """Automatically commits and pushes render.yaml and ui/tunnel_config.json to GitHub."""
     git_bin = find_git()
     try:
         # Check if remote origin exists
@@ -134,10 +160,10 @@ def git_push_config():
             print("[GIT] No remote origin configured yet. Skipping auto-push to GitHub.")
             return
 
-        print("[GIT] Staging ui/tunnel_config.json...")
-        subprocess.run([git_bin, "add", "ui/tunnel_config.json"], cwd=str(BASE_DIR), check=True)
+        print("[GIT] Staging render.yaml and ui/tunnel_config.json...")
+        subprocess.run([git_bin, "add", "render.yaml", "ui/tunnel_config.json"], cwd=str(BASE_DIR), check=True)
 
-        commit_msg = f"chore(infra): sync active cloudflare tunnel url [{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC]"
+        commit_msg = f"chore(infra): sync active cloudflare tunnel to render.yaml and ui config [{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC]"
         subprocess.run([git_bin, "commit", "-m", commit_msg], cwd=str(BASE_DIR), capture_output=True)
 
         print("[GIT] Pushing updated tunnel config to GitHub (origin/main)...")
@@ -159,6 +185,7 @@ def run_tunnel():
     print(f"  * Binary: {cf_bin}")
     print(f"  * Target: http://localhost:8000")
     print(f"  * Output: {CONFIG_FILE}")
+    print(f"  * Render: {RENDER_FILE}")
     print("=" * 70)
 
     cmd = [cf_bin, "tunnel", "--url", "http://localhost:8000"]
