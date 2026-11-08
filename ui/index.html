@@ -477,6 +477,19 @@
       </div>
     </section>
 
+    <!-- Active Tunnel Display Card -->
+    <section class="arch-card" id="tunnelInfoSection" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div>
+          <span style="font-size: 0.72rem; color: var(--accent-cyan); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Live Cloudflare Tunnel</span>
+          <div id="tunnelUrlDisplay" style="font-family: var(--font-mono); font-size: 0.95rem; font-weight: 600; color: #fff; margin-top: 0.2rem; word-break: break-all;">—</div>
+        </div>
+        <button class="btn-refresh" id="btnCopyTunnel" onclick="copyTunnelUrl()" style="padding: 0.4rem 0.85rem; font-size: 0.8rem;">
+          Copy Tunnel URL
+        </button>
+      </div>
+    </section>
+
     <!-- Architecture Topology -->
     <section class="arch-card">
       <h3>
@@ -536,7 +549,8 @@
   </div>
 
   <script>
-    const HEALTH_ENDPOINT = '/api/health';
+    let activeEndpoint = '/api/health';
+    let remoteTunnelUrl = '';
     const POLL_INTERVAL = 10; // seconds
     let secondsRemaining = POLL_INTERVAL;
     let timerId = null;
@@ -552,7 +566,38 @@
       hostBadge.style.borderColor = 'rgba(6, 182, 212, 0.6)';
     }
 
-    // Ping health endpoint
+    // Load dynamic tunnel config if available
+    async function loadTunnelConfig() {
+      try {
+        const res = await fetch('/tunnel_config.json', { cache: 'no-store' });
+        if (res.ok) {
+          const cfg = await res.json();
+          if (cfg.tunnel_url) {
+            remoteTunnelUrl = cfg.tunnel_url;
+            const sec = document.getElementById('tunnelInfoSection');
+            const disp = document.getElementById('tunnelUrlDisplay');
+            if (sec && disp) {
+              sec.style.display = 'block';
+              disp.textContent = remoteTunnelUrl;
+            }
+          }
+        }
+      } catch (e) {
+        // tunnel_config.json not yet written or offline
+      }
+    }
+
+    function copyTunnelUrl() {
+      if (remoteTunnelUrl) {
+        navigator.clipboard.writeText(remoteTunnelUrl);
+        const btn = document.getElementById('btnCopyTunnel');
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 2000);
+      }
+    }
+
+    // Ping health endpoint with automatic fallback
     async function pingHealthEndpoint(isManual = false) {
       const card = document.getElementById('statusCard');
       const badge = document.getElementById('statusBadge');
@@ -565,38 +610,55 @@
 
       const startTime = performance.now();
 
+      // First attempt primary endpoint (/api/health)
+      let endpointToTry = activeEndpoint;
+      let response = null;
+      let errObj = null;
+
       try {
-        const response = await fetch(HEALTH_ENDPOINT, {
+        response = await fetch(endpointToTry, {
           cache: 'no-store',
-          headers: {
-            'Accept': 'application/json'
-          }
+          headers: { 'Accept': 'application/json' }
         });
-
-        const elapsed = Math.round(performance.now() - startTime);
-
-        if (response.ok) {
-          const data = await response.json();
-
-          // Green Glowing Badge
-          card.className = 'status-card state-online';
-          badge.className = 'glowing-badge badge-online';
-          badgeText.textContent = 'Connected to Local Engine';
-
-          valEngine.textContent = data.engine || 'Local Windows PC';
-          valTimestamp.textContent = new Date(data.timestamp || Date.now()).toLocaleTimeString();
-          valLatency.textContent = `${elapsed} ms`;
-          valLatency.style.color = '#34d399';
-          valHttpCode.textContent = `${response.status} OK`;
-          valHttpCode.style.color = '#34d399';
-
-          jsonOutput.textContent = JSON.stringify(data, null, 2);
-        } else {
-          throw new Error(`HTTP ${response.status} ${response.statusText}`);
-        }
       } catch (err) {
-        const elapsed = Math.round(performance.now() - startTime);
+        errObj = err;
+      }
 
+      // If primary relative call fails on Render and we know the remote tunnel, attempt direct CORS call
+      if ((!response || !response.ok) && !isLocalhost && remoteTunnelUrl && endpointToTry !== `${remoteTunnelUrl}/api/health`) {
+        try {
+          endpointToTry = `${remoteTunnelUrl}/api/health`;
+          response = await fetch(endpointToTry, {
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+          });
+          if (response.ok) {
+            activeEndpoint = endpointToTry;
+          }
+        } catch (fallbackErr) {
+          errObj = fallbackErr;
+        }
+      }
+
+      const elapsed = Math.round(performance.now() - startTime);
+
+      if (response && response.ok) {
+        const data = await response.json();
+
+        // Green Glowing Badge
+        card.className = 'status-card state-online';
+        badge.className = 'glowing-badge badge-online';
+        badgeText.textContent = 'Connected to Local Engine';
+
+        valEngine.textContent = data.engine || 'Local Windows PC';
+        valTimestamp.textContent = new Date(data.timestamp || Date.now()).toLocaleTimeString();
+        valLatency.textContent = `${elapsed} ms`;
+        valLatency.style.color = '#34d399';
+        valHttpCode.textContent = `${response.status} OK`;
+        valHttpCode.style.color = '#34d399';
+
+        jsonOutput.textContent = JSON.stringify(data, null, 2);
+      } else {
         // Red Glowing Badge
         card.className = 'status-card state-offline';
         badge.className = 'glowing-badge badge-offline';
@@ -606,13 +668,14 @@
         valTimestamp.textContent = new Date().toLocaleTimeString();
         valLatency.textContent = `${elapsed} ms`;
         valLatency.style.color = '#f87171';
-        valHttpCode.textContent = err.message.includes('HTTP') ? err.message : 'Connection Refused';
+        valHttpCode.textContent = response ? `HTTP ${response.status}` : 'Connection Refused';
         valHttpCode.style.color = '#f87171';
 
         jsonOutput.textContent = JSON.stringify({
           error: "Failed to connect to Local Engine",
-          endpoint: HEALTH_ENDPOINT,
-          message: err.message,
+          endpoint: endpointToTry,
+          remote_tunnel: remoteTunnelUrl || "Not yet configured",
+          message: errObj ? errObj.message : (response ? response.statusText : "Offline"),
           suggestion: "Ensure 'run_server.py' is running on your Windows PC and Cloudflare Tunnel is active."
         }, null, 2);
       }
@@ -646,7 +709,8 @@
     }
 
     // Initialize immediately on load
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
+      await loadTunnelConfig();
       pingHealthEndpoint();
       startCountdownTimer();
     });
