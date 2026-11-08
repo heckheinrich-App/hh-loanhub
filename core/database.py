@@ -16,7 +16,9 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "loanhub.db"
+UPLOADS_DIR = DATA_DIR / "uploads"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_backup_candidates() -> list[Path]:
     """Returns candidate Google Drive and local backup directories in priority order."""
@@ -87,10 +89,45 @@ def generate_loan_reference() -> str:
 
 
 # ------------------------------------------------------------------------------
-# Database Initialization & Schema Definition
+# Database Initialization, Migrations & Schema Definition
 # ------------------------------------------------------------------------------
+def run_migrations(conn: sqlite3.Connection):
+    """Dynamically applies schema migrations for Phase 2 without data loss."""
+    cursor = conn.cursor()
+
+    # 1. Users table migrations
+    user_cols = {row["name"] for row in cursor.execute("PRAGMA table_info(users)").fetchall()}
+    if "username" not in user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN username TEXT DEFAULT ''")
+    if "bank_name" not in user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN bank_name TEXT DEFAULT ''")
+    if "bank_account_number" not in user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN bank_account_number TEXT DEFAULT ''")
+    if "biometric_credential_id" not in user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN biometric_credential_id TEXT DEFAULT ''")
+    if "biometric_enabled" not in user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN biometric_enabled INTEGER DEFAULT 0")
+
+    # 2. Loans table migrations
+    loan_cols = {row["name"] for row in cursor.execute("PRAGMA table_info(loans)").fetchall()}
+    if "disbursed_at" not in loan_cols:
+        cursor.execute("ALTER TABLE loans ADD COLUMN disbursed_at TEXT")
+    if "month_end_deduction_date" not in loan_cols:
+        cursor.execute("ALTER TABLE loans ADD COLUMN month_end_deduction_date TEXT")
+    if "payment_requested" not in loan_cols:
+        cursor.execute("ALTER TABLE loans ADD COLUMN payment_requested INTEGER DEFAULT 0")
+    if "payment_requested_at" not in loan_cols:
+        cursor.execute("ALTER TABLE loans ADD COLUMN payment_requested_at TEXT")
+    if "payment_requested_notes" not in loan_cols:
+        cursor.execute("ALTER TABLE loans ADD COLUMN payment_requested_notes TEXT DEFAULT ''")
+    if "paid_amount" not in loan_cols:
+        cursor.execute("ALTER TABLE loans ADD COLUMN paid_amount REAL DEFAULT 0.0")
+
+    conn.commit()
+
+
 def init_db():
-    """Initializes tables and seeds default master admin if not present."""
+    """Initializes tables, applies migrations, and seeds default Master Admin (Hein / 1234)."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -101,13 +138,18 @@ def init_db():
         account_number TEXT UNIQUE NOT NULL,
         full_name TEXT NOT NULL,
         phone TEXT UNIQUE NOT NULL,
+        username TEXT DEFAULT '',
         id_number TEXT DEFAULT '',
         address TEXT DEFAULT '',
+        bank_name TEXT DEFAULT '',
+        bank_account_number TEXT DEFAULT '',
         guarantor_name TEXT DEFAULT '',
         guarantor_phone TEXT DEFAULT '',
         password_hash TEXT NOT NULL,
         salt TEXT NOT NULL,
         role TEXT DEFAULT 'client',
+        biometric_credential_id TEXT DEFAULT '',
+        biometric_enabled INTEGER DEFAULT 0,
         created_at TEXT NOT NULL
     );
     """)
@@ -120,12 +162,18 @@ def init_db():
         user_id INTEGER NOT NULL,
         amount REAL NOT NULL,
         term_months INTEGER NOT NULL DEFAULT 1,
-        interest_rate REAL NOT NULL DEFAULT 15.0,
+        interest_rate REAL NOT NULL DEFAULT 30.0,
         total_repayable REAL NOT NULL,
         purpose TEXT DEFAULT '',
         collateral_note TEXT DEFAULT '',
         status TEXT DEFAULT 'pending',
         first_payment_due TEXT NOT NULL,
+        disbursed_at TEXT,
+        month_end_deduction_date TEXT,
+        payment_requested INTEGER DEFAULT 0,
+        payment_requested_at TEXT,
+        payment_requested_notes TEXT DEFAULT '',
+        paid_amount REAL DEFAULT 0.0,
         created_at TEXT NOT NULL,
         approved_at TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -144,6 +192,43 @@ def init_db():
         reference TEXT NOT NULL,
         notes TEXT DEFAULT '',
         FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    """)
+
+    # KYC Documents Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS kyc_documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        doc_type TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        mime_type TEXT NOT NULL,
+        uploaded_at TEXT NOT NULL,
+        ocr_status TEXT DEFAULT 'pending',
+        ocr_extracted_text TEXT DEFAULT '',
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    """)
+
+    # Affordability Reports Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS affordability_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        loan_id INTEGER,
+        identity_match_status TEXT DEFAULT 'NEEDS MANUAL REVIEW',
+        identity_match_notes TEXT DEFAULT '',
+        estimated_monthly_income REAL DEFAULT 0.0,
+        estimated_monthly_expenses REAL DEFAULT 0.0,
+        estimated_disposable_income REAL DEFAULT 0.0,
+        max_recommended_loan REAL DEFAULT 0.0,
+        admin_override_disposable REAL,
+        admin_notes TEXT DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     """)
@@ -170,34 +255,50 @@ def init_db():
     );
     """)
 
-    # Seed Default Master Admin Account
-    admin_phone = "0821234567"
-    admin_user = cursor.execute("SELECT id FROM users WHERE phone = ?", (admin_phone,)).fetchone()
-    if not admin_user:
-        admin_pw_hash, admin_salt = hash_password("AdminPassword2026!")
-        now_iso = datetime.now(timezone.utc).isoformat()
+    # Run any missing column migrations
+    run_migrations(conn)
+
+    # Seed/Update Master Admin: Hein / 1234
+    admin_pw_hash, admin_salt = hash_password("1234")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    existing_admin = cursor.execute("SELECT id FROM users WHERE username = 'Hein' OR phone = 'Hein' OR account_number = '#888888'").fetchone()
+
+    if existing_admin:
+        cursor.execute("""
+        UPDATE users SET 
+            username = 'Hein',
+            full_name = 'Hein (Master Admin)',
+            phone = 'Hein',
+            password_hash = ?,
+            salt = ?,
+            role = 'admin'
+        WHERE id = ?
+        """, (admin_pw_hash, admin_salt, existing_admin["id"]))
+        print("[DATABASE] Updated Master Admin Account -> Username: Hein / Password: 1234")
+    else:
         cursor.execute("""
         INSERT INTO users (
-            account_number, full_name, phone, id_number, address,
-            guarantor_name, guarantor_phone, password_hash, salt, role, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            account_number, full_name, phone, username, id_number, address,
+            bank_name, bank_account_number, guarantor_name, guarantor_phone,
+            password_hash, salt, role, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            "#888888", "Master Admin (HH)", admin_phone, "8001010000088",
-            "HH Cash Solutions HQ", "Executive Desk", "0821234567",
+            "#888888", "Hein (Master Admin)", "Hein", "Hein", "8001010000088",
+            "HH Cash Solutions HQ", "Capitec Bank", "1000888888", "Executive Desk", "0821234567",
             admin_pw_hash, admin_salt, "admin", now_iso
         ))
-        print("[DATABASE] Seeded Default Master Admin: 0821234567 / AdminPassword2026!")
+        print("[DATABASE] Seeded Master Admin: Hein / 1234")
 
-    # Seed Default Settings
+    # Seed Default Settings (30% interest rate as required)
     default_settings = [
-        ("default_interest_rate", "15.0"),
+        ("default_interest_rate", "30.0"),
         ("min_loan_amount", "500"),
         ("max_loan_amount", "20000"),
         ("support_whatsapp", "27821234567"),
         ("support_phone", "0821234567")
     ]
     for key, val in default_settings:
-        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, val))
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, val))
 
     conn.commit()
     conn.close()
@@ -205,12 +306,12 @@ def init_db():
 
 
 # ------------------------------------------------------------------------------
-# Automated Google Drive Sync Hook
+# Automated Google Drive Sync Hook (Database + Uploaded KYC Documents)
 # ------------------------------------------------------------------------------
 def trigger_auto_backup() -> dict:
     """
-    Copies data/loanhub.db and dumps a JSON snapshot to Google Drive.
-    Triggered on user registration, loan application, approval, or repayment.
+    Copies data/loanhub.db, KYC uploaded documents, and dumps a full JSON snapshot to Google Drive.
+    Triggered on registration, document upload, loan lifecycle changes, or repayment.
     """
     now = datetime.now(timezone.utc)
     ts = now.strftime("%Y-%m-%d_%H-%M-%S")
@@ -221,7 +322,6 @@ def trigger_auto_backup() -> dict:
         try:
             if candidate and str(candidate).strip() and str(candidate) != ".":
                 candidate.mkdir(parents=True, exist_ok=True)
-                # Verify writability
                 test_file = candidate / ".test_write"
                 test_file.write_text("ok")
                 test_file.unlink()
@@ -243,22 +343,42 @@ def trigger_auto_backup() -> dict:
     except Exception as e:
         print(f"[BACKUP ERROR] Failed to copy SQLite file: {e}")
 
-    # 2. Export JSON snapshot of all tables for zero-loss recovery
+    # 2. Sync KYC uploaded documents folder to Google Drive
+    backup_uploads_dir = backup_target_dir / "uploads"
+    backup_uploads_dir.mkdir(parents=True, exist_ok=True)
+    if UPLOADS_DIR.exists():
+        try:
+            for item in UPLOADS_DIR.rglob("*"):
+                if item.is_file():
+                    rel_path = item.relative_to(UPLOADS_DIR)
+                    dest_file = backup_uploads_dir / rel_path
+                    dest_file.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(item, dest_file)
+        except Exception as e:
+            print(f"[BACKUP ERROR] Failed to sync KYC uploads: {e}")
+
+    # 3. Export JSON snapshot of all tables for zero-loss recovery
     snapshot_json = backup_target_dir / f"loanhub_snapshot_{ts}.json"
     latest_json = backup_target_dir / "loanhub_latest.json"
     conn = get_db_connection()
     try:
-        users = [dict(r) for r in conn.execute("SELECT id, account_number, full_name, phone, id_number, address, role, created_at FROM users").fetchall()]
+        users = [dict(r) for r in conn.execute("SELECT id, account_number, full_name, phone, username, id_number, address, bank_name, bank_account_number, role, created_at FROM users").fetchall()]
         loans = [dict(r) for r in conn.execute("SELECT * FROM loans").fetchall()]
         repayments = [dict(r) for r in conn.execute("SELECT * FROM repayments").fetchall()]
+        docs = [dict(r) for r in conn.execute("SELECT id, user_id, doc_type, filename, file_size, uploaded_at, ocr_status FROM kyc_documents").fetchall()]
+        affordability = [dict(r) for r in conn.execute("SELECT * FROM affordability_reports").fetchall()]
+
         data_dump = {
             "snapshot_timestamp": now.isoformat(),
             "users_count": len(users),
             "loans_count": len(loans),
             "repayments_count": len(repayments),
+            "kyc_docs_count": len(docs),
             "users": users,
             "loans": loans,
-            "repayments": repayments
+            "repayments": repayments,
+            "kyc_documents": docs,
+            "affordability_reports": affordability
         }
         with open(snapshot_json, "w", encoding="utf-8") as f:
             json.dump(data_dump, f, indent=2)

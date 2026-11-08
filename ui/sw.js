@@ -1,6 +1,6 @@
 /* HH Cash Solutions - Service Worker (Network-First Strategy & Cache-Busting) */
 
-const CACHE_NAME = 'hh-cash-solutions-v5';
+const CACHE_NAME = 'hh-cash-solutions-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 
 # Database & Routers
 from core.database import init_db, DB_PATH
+from core.scheduler import loan_lifecycle_monitor_worker
 from api.auth import router as auth_router
 from api.loans import router as loans_router
 from api.admin import router as admin_router
@@ -61,11 +62,13 @@ async def render_keep_alive_worker():
 async def lifespan(app: FastAPI):
     # Initialize SQLite database and tables
     init_db()
-    # Startup: spawn keep-alive background worker
+    # Startup: spawn keep-alive and loan lifecycle background workers
     keep_alive_task = asyncio.create_task(render_keep_alive_worker())
+    scheduler_task = asyncio.create_task(loan_lifecycle_monitor_worker())
     yield
     # Shutdown
     keep_alive_task.cancel()
+    scheduler_task.cancel()
 
 
 # Initialize FastAPI application
