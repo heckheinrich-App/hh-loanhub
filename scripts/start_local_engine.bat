@@ -10,14 +10,14 @@ echo ===========================================================================
 echo Working Directory: %CD%
 
 :: Check for virtual environment in standard folders
-if exist "venv\Scripts\activate.bat" (
-    echo [INFO] Activating virtual environment: venv
-    call "venv\Scripts\activate.bat"
-) else if exist ".venv\Scripts\activate.bat" (
-    echo [INFO] Activating virtual environment: .venv
-    call ".venv\Scripts\activate.bat"
-) else (
-    echo [INFO] No virtual environment detected in venv/ or .venv/. Using system Python.
+if exist "venv\Scripts\python.exe" (
+    echo [INFO] Launching FastAPI Core Engine using venv on http://localhost:8000...
+    "venv\Scripts\python.exe" run_server.py
+    exit /b %ERRORLEVEL%
+) else if exist ".venv\Scripts\python.exe" (
+    echo [INFO] Launching FastAPI Core Engine using .venv on http://localhost:8000...
+    ".venv\Scripts\python.exe" run_server.py
+    exit /b %ERRORLEVEL%
 )
 
 :: Verify python is available (check PATH and standard user installation)
