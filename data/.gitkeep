@@ -1,0 +1,3 @@
+# HH LOANHUB - Local Database & Storage
+# Strictly local SQLite / JSON / session databases.
+# Real data files are ignored by .gitignore and never pushed to remote repositories.

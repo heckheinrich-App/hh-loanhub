@@ -1,0 +1,17 @@
+# HH LOANHUB - Render Infrastructure as Code Blueprint
+# Free-Tier Cloud Gateway & Static Frontend Reverse Proxy
+
+services:
+  - type: web
+    name: hh-loanhub-gateway
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /gateway/health
+    envVars:
+      - key: CLOUDFLARE_TUNNEL_URL
+        sync: false
+        # Configure this in the Render Dashboard with your Cloudflare Tunnel URL:
+        # e.g., https://your-tunnel-name.trycloudflare.com

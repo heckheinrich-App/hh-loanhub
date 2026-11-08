@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HH LOANHUB — System Status</title>
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-surface: #111827;
+      --bg-surface-elevated: #1f2937;
+      --border-subtle: #374151;
+      --border-highlight: #4b5563;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --status-online: #10b981;
+      --status-online-glow: rgba(16, 185, 129, 0.4);
+      --status-offline: #ef4444;
+      --status-offline-glow: rgba(239, 68, 68, 0.4);
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2.5rem 1.5rem;
+      line-height: 1.5;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    /* Header Bar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border-subtle);
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2563eb, #06b6d4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.25rem;
+      letter-spacing: -0.05em;
+      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.35);
+    }
+
+    .brand-title h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+
+    .brand-title p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .mode-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      padding: 0.4rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      font-family: var(--font-mono);
+    }
+
+    /* Main Status Card */
+    .status-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 2.25rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .status-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: #4b5563;
+      transition: background 0.3s ease;
+    }
+
+    .status-card.state-online::before {
+      background: var(--status-online);
+      box-shadow: 0 0 12px var(--status-online);
+    }
+
+    .status-card.state-offline::before {
+      background: var(--status-offline);
+      box-shadow: 0 0 12px var(--status-offline);
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .card-title-group h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+
+    /* Glowing Badge Component */
+    .glowing-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.6rem 1.2rem;
+      border-radius: 9999px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      transition: all 0.3s ease;
+    }
+
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      position: relative;
+    }
+
+    /* Online State */
+    .badge-online {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      box-shadow: 0 0 20px var(--status-online-glow);
+    }
+
+    .badge-online .pulse-dot {
+      background-color: var(--status-online);
+      box-shadow: 0 0 10px var(--status-online);
+      animation: pulse-online 1.8s infinite;
+    }
+
+    /* Offline State */
+    .badge-offline {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+      box-shadow: 0 0 20px var(--status-offline-glow);
+    }
+
+    .badge-offline .pulse-dot {
+      background-color: var(--status-offline);
+      box-shadow: 0 0 10px var(--status-offline);
+      animation: pulse-offline 1.4s infinite;
+    }
+
+    /* Checking State */
+    .badge-checking {
+      background: rgba(156, 163, 175, 0.1);
+      border: 1px solid rgba(156, 163, 175, 0.3);
+      color: #d1d5db;
+    }
+
+    .badge-checking .pulse-dot {
+      background-color: #9ca3af;
+    }
+
+    @keyframes pulse-online {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { box-shadow: 0 0 0 9px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    @keyframes pulse-offline {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { box-shadow: 0 0 0 9px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .metric-item {
+      background: var(--bg-surface-elevated);
+      padding: 1rem;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+
+    .metric-value {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    /* Actions Bar */
+    .controls-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.5rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .countdown-text {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .countdown-bar {
+      width: 80px;
+      height: 4px;
+      background: var(--border-subtle);
+      border-radius: 2px;
+      overflow: hidden;
+      display: inline-block;
+    }
+
+    .countdown-fill {
+      height: 100%;
+      background: var(--accent-cyan);
+      width: 100%;
+      transition: width 1s linear;
+    }
+
+    button.btn-refresh {
+      background: var(--bg-surface-elevated);
+      color: #fff;
+      border: 1px solid var(--border-highlight);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    button.btn-refresh:hover {
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    /* Architecture Pipeline Card */
+    .arch-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.75rem;
+    }
+
+    .arch-card h3 {
+      font-size: 1rem;
+      margin-bottom: 1.25rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .pipeline-diagram {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .pipe-node {
+      flex: 1;
+      min-width: 150px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      padding: 0.85rem 1rem;
+      border-radius: 10px;
+      text-align: center;
+      position: relative;
+    }
+
+    .pipe-node.active-node {
+      border-color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.08);
+    }
+
+    .pipe-node .node-type {
+      font-size: 0.68rem;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    .pipe-node .node-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-top: 0.2rem;
+    }
+
+    .pipe-node .node-sub {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+
+    .pipe-arrow {
+      color: var(--text-muted);
+      font-size: 1.2rem;
+      font-weight: 700;
+      user-select: none;
+    }
+
+    /* JSON Debug Box */
+    .debug-box {
+      background: #05080e;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: #38bdf8;
+      overflow-x: auto;
+      max-height: 220px;
+      white-space: pre-wrap;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">HH</div>
+        <div class="brand-title">
+          <h1>HH LOANHUB</h1>
+          <p>Phase 0: Hybrid Deployment Architecture</p>
+        </div>
+      </div>
+      <div class="mode-badge" id="hostModeBadge">
+        DETECTING ENVIRONMENT...
+      </div>
+    </header>
+
+    <!-- Main Status Card -->
+    <section class="status-card" id="statusCard">
+      <div class="card-top">
+        <div class="card-title-group">
+          <h2>Core Engine Health Heartbeat</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">
+            Probing target: <code style="font-family: var(--font-mono); color: var(--accent-cyan);">/api/health</code>
+          </p>
+        </div>
+
+        <!-- Glowing Dynamic Badge -->
+        <div id="statusBadge" class="glowing-badge badge-checking">
+          <span class="pulse-dot"></span>
+          <span id="badgeText">Probing Connection...</span>
+        </div>
+      </div>
+
+      <!-- Metrics Grid -->
+      <div class="metrics-grid">
+        <div class="metric-item">
+          <div class="metric-label">Engine Host</div>
+          <div class="metric-value" id="valEngine">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Last Heartbeat</div>
+          <div class="metric-value" id="valTimestamp">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Round-trip Latency</div>
+          <div class="metric-value" id="valLatency">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">HTTP Status</div>
+          <div class="metric-value" id="valHttpCode">—</div>
+        </div>
+      </div>
+
+      <!-- Controls & Timer -->
+      <div class="controls-row">
+        <div class="countdown-text">
+          <span>Auto-refreshing in <strong id="countdownSeconds">10</strong>s</span>
+          <div class="countdown-bar">
+            <div class="countdown-fill" id="countdownFill"></div>
+          </div>
+        </div>
+        <button class="btn-refresh" id="btnRefresh" onclick="pingHealthEndpoint(true)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          Ping Engine Now
+        </button>
+      </div>
+    </section>
+
+    <!-- Architecture Topology -->
+    <section class="arch-card">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);">
+          <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+          <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+          <line x1="6" y1="6" x2="6.01" y2="6"></line>
+          <line x1="6" y1="18" x2="6.01" y2="18"></line>
+        </svg>
+        Hybrid Traffic Flow & Topology
+      </h3>
+      <div class="pipeline-diagram">
+        <div class="pipe-node">
+          <div class="node-type">Client Edge</div>
+          <div class="node-name">Web / Mobile App</div>
+          <div class="node-sub">User Browser</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node active-node">
+          <div class="node-type">Public Host</div>
+          <div class="node-name">Render Gateway</div>
+          <div class="node-sub">Static UI + Nginx</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node">
+          <div class="node-type">Encrypted Tunnel</div>
+          <div class="node-name">Cloudflare</div>
+          <div class="node-sub">Zero Trust Tunnel</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node active-node">
+          <div class="node-type">Secure Core</div>
+          <div class="node-name">Windows PC</div>
+          <div class="node-sub">FastAPI + SQLite/JSON</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node">
+          <div class="node-type">Resilience</div>
+          <div class="node-name">Google Drive</div>
+          <div class="node-sub">Zero-Loss Backup</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Raw API Telemetry Inspector -->
+    <section class="arch-card">
+      <h3 style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Raw API Telemetry Inspector (/api/health)
+      </h3>
+      <div class="debug-box" id="jsonOutput">Awaiting response from local engine...</div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      HH LOANHUB &bull; Lead Infrastructure Architecture &bull; Local Engine on Port 8000
+    </footer>
+  </div>
+
+  <script>
+    const HEALTH_ENDPOINT = '/api/health';
+    const POLL_INTERVAL = 10; // seconds
+    let secondsRemaining = POLL_INTERVAL;
+    let timerId = null;
+
+    // Detect if running on localhost or Render public domain
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const hostBadge = document.getElementById('hostModeBadge');
+    if (isLocalhost) {
+      hostBadge.textContent = 'MODE: LOCALHOST DIRECT (PORT ' + (window.location.port || '8000') + ')';
+      hostBadge.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+    } else {
+      hostBadge.textContent = 'MODE: RENDER CLOUD GATEWAY';
+      hostBadge.style.borderColor = 'rgba(6, 182, 212, 0.6)';
+    }
+
+    // Ping health endpoint
+    async function pingHealthEndpoint(isManual = false) {
+      const card = document.getElementById('statusCard');
+      const badge = document.getElementById('statusBadge');
+      const badgeText = document.getElementById('badgeText');
+      const valEngine = document.getElementById('valEngine');
+      const valTimestamp = document.getElementById('valTimestamp');
+      const valLatency = document.getElementById('valLatency');
+      const valHttpCode = document.getElementById('valHttpCode');
+      const jsonOutput = document.getElementById('jsonOutput');
+
+      const startTime = performance.now();
+
+      try {
+        const response = await fetch(HEALTH_ENDPOINT, {
+          cache: 'no-store',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        const elapsed = Math.round(performance.now() - startTime);
+
+        if (response.ok) {
+          const data = await response.json();
+
+          // Green Glowing Badge
+          card.className = 'status-card state-online';
+          badge.className = 'glowing-badge badge-online';
+          badgeText.textContent = 'Connected to Local Engine';
+
+          valEngine.textContent = data.engine || 'Local Windows PC';
+          valTimestamp.textContent = new Date(data.timestamp || Date.now()).toLocaleTimeString();
+          valLatency.textContent = `${elapsed} ms`;
+          valLatency.style.color = '#34d399';
+          valHttpCode.textContent = `${response.status} OK`;
+          valHttpCode.style.color = '#34d399';
+
+          jsonOutput.textContent = JSON.stringify(data, null, 2);
+        } else {
+          throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        }
+      } catch (err) {
+        const elapsed = Math.round(performance.now() - startTime);
+
+        // Red Glowing Badge
+        card.className = 'status-card state-offline';
+        badge.className = 'glowing-badge badge-offline';
+        badgeText.textContent = 'Local Engine Offline - Check Tunnel/PC';
+
+        valEngine.textContent = 'Unreachable';
+        valTimestamp.textContent = new Date().toLocaleTimeString();
+        valLatency.textContent = `${elapsed} ms`;
+        valLatency.style.color = '#f87171';
+        valHttpCode.textContent = err.message.includes('HTTP') ? err.message : 'Connection Refused';
+        valHttpCode.style.color = '#f87171';
+
+        jsonOutput.textContent = JSON.stringify({
+          error: "Failed to connect to Local Engine",
+          endpoint: HEALTH_ENDPOINT,
+          message: err.message,
+          suggestion: "Ensure 'run_server.py' is running on your Windows PC and Cloudflare Tunnel is active."
+        }, null, 2);
+      }
+
+      // Reset countdown timer
+      secondsRemaining = POLL_INTERVAL;
+      updateCountdownDisplay();
+    }
+
+    function updateCountdownDisplay() {
+      const countdownSecElem = document.getElementById('countdownSeconds');
+      const fillElem = document.getElementById('countdownFill');
+      if (countdownSecElem) countdownSecElem.textContent = secondsRemaining;
+      if (fillElem) {
+        const pct = (secondsRemaining / POLL_INTERVAL) * 100;
+        fillElem.style.width = pct + '%';
+      }
+    }
+
+    // Interval countdown
+    function startCountdownTimer() {
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(() => {
+        secondsRemaining--;
+        if (secondsRemaining <= 0) {
+          pingHealthEndpoint();
+        } else {
+          updateCountdownDisplay();
+        }
+      }, 1000);
+    }
+
+    // Initialize immediately on load
+    window.addEventListener('DOMContentLoaded', () => {
+      pingHealthEndpoint();
+      startCountdownTimer();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+@echo off
+setlocal EnableDelayedExpansion
+
+title HH LOANHUB - Local Core Engine
+cd /d "%~dp0\.."
+
+echo ==============================================================================
+echo                 HH LOANHUB - LOCAL CORE ENGINE LAUNCHER
+echo ==============================================================================
+echo Working Directory: %CD%
+
+:: Check for virtual environment in standard folders
+if exist "venv\Scripts\activate.bat" (
+    echo [INFO] Activating virtual environment: venv
+    call "venv\Scripts\activate.bat"
+) else if exist ".venv\Scripts\activate.bat" (
+    echo [INFO] Activating virtual environment: .venv
+    call ".venv\Scripts\activate.bat"
+) else (
+    echo [INFO] No virtual environment detected in venv/ or .venv/. Using system Python.
+)
+
+:: Verify python is available
+where python >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Python is not found in PATH or the activated virtual environment.
+    echo Please install Python 3.10+ and ensure it is added to your system PATH.
+    pause
+    exit /b 1
+)
+
+:: Ensure dependencies are present (optional check)
+if not exist "run_server.py" (
+    echo [ERROR] run_server.py not found in %CD%!
+    pause
+    exit /b 1
+)
+
+echo [INFO] Launching FastAPI Core Engine on http://localhost:8000...
+python run_server.py
+
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Server terminated unexpectedly with exit code %ERRORLEVEL%.
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+exit /b 0
