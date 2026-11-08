@@ -1,7 +1,7 @@
 {
   "name": "HH Cash Solutions",
   "short_name": "HH LoanHub",
-  "description": "HH Cash Solutions — Your Financial Partner. Fast, reliable loans and repayment management.",
+  "description": "HH Cash Solutions - Your Financial Partner. Fast, reliable loans and repayment management.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
